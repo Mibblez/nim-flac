@@ -5,6 +5,7 @@ import algorithm
 import sequtils
 import strutils
 import streams
+import re
 
 type UnreachableError* = object of Defect
 
@@ -59,6 +60,13 @@ type  # TODO: Constructors. Make "sub-objects" for each block type?
       reserved_number: uint8
     of btInvalid:
       invalid_number: uint8
+
+proc searchVorbisComment*(vorbis_comment: seq[string], query: string): string =
+  for entry in vorbis_comment:
+    let entry_split = entry.split(re"=")
+
+    if entry_split[0] == query:
+      return entry_split[1]
 
 proc readU64BE(bytes: openArray[uint8], start_bit, end_bit: uint): uint64 =
   if (end_bit - start_bit + 1) > 64:
