@@ -6,6 +6,7 @@ import sequtils
 import strutils
 import streams
 import re
+import tables
 
 type UnreachableError* = object of Defect
 
@@ -47,7 +48,7 @@ type  # TODO: Constructors. Make "sub-objects" for each block type?
       application_data: seq[uint8]
     of btVorbisComment:
       vendor_string*: string
-      user_comments*: seq[string]
+      user_comments*: Table[string, string]
     of btPadding:
       pad_len: int
     of btSeekTable:
@@ -60,13 +61,6 @@ type  # TODO: Constructors. Make "sub-objects" for each block type?
       reserved_number: uint8
     of btInvalid:
       invalid_number: uint8
-
-proc searchVorbisComment*(vorbis_comment: seq[string], query: string): string =
-  for entry in vorbis_comment:
-    let entry_split = entry.split(re"=")
-
-    if entry_split[0] == query:
-      return entry_split[1]
 
 proc readU64BE(bytes: openArray[uint8], start_bit, end_bit: uint): uint64 =
   if (end_bit - start_bit + 1) > 64:
@@ -179,14 +173,16 @@ proc newFlacBlock(block_header: FlacBlockHeader, strm: FileStream): FlacBlock =
     let user_comment_list_len = readU32LE(buffer[pos..<pos + 4])
     pos += 4
 
-    var user_comments: seq[string]
+    var user_comments = initTable[string, string]()
 
     for _ in 0..<user_comment_list_len:
       let comment_len = readU32LE(buffer[pos..<pos + 4])
       pos += 4
 
       let user_comment = buffer[pos..<pos + comment_len].mapIt(char(it)).join()
-      user_comments.add(user_comment)
+      let entry_split = user_comment.split(re"=")
+
+      user_comments[entry_split[0]] = entry_split[1]
 
       pos += comment_len
 
