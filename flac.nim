@@ -54,7 +54,9 @@ type  # TODO: Constructors. Make "sub-objects" for each block type?
     of btSeekTable:
       seek_points*: seq[SeekPoint]
     of btPicture:
-      picture: string
+      picture_type, width, height, color_depth, num_colors: uint8
+      mime_type, picture_description: string
+      picture_data: seq[uint8]
     of btCueSheet:
       cue: bool
     of btReserved:
@@ -189,11 +191,70 @@ proc newFlacBlock(block_header: FlacBlockHeader, strm: FileStream): FlacBlock =
     return FlacBlock(header: block_header, kind: btVorbisComment,
       vendor_string: vendor_string, user_comments: user_comments)
   of 5:       # Cuesheet (INCOMPLETE)
+    echo(block_header.block_length)
     strm.setPosition(strm.getPosition() + int(block_header.block_length)) #REMOVE
     return FlacBlock(header: block_header, kind: btCueSheet, cue: true)
-  of 6:       # Picture (INCOMPLETE)
-    strm.setPosition(strm.getPosition() + int(block_header.block_length)) #REMOVE
-    return FlacBlock(header: block_header, kind: btPicture, picture: "cool album art")
+  of 6:       # Picture (WIP)
+    var buffer: array[64, uint8]
+
+    # Read the first 8 bytes for the picture type and the mime_type_length
+    doAssert(strm.readData(addr(buffer), 8) == 8)
+    let picture_type: uint8 = uint8(readU64BE(buffer, 0, 31))
+    let mime_type_length: int = int(readU64BE(buffer, 32, 63))
+
+    # Read the mime_type from file and convert the bytes into a string
+    var mime_type: string = ""
+    doAssert(strm.readData(addr(buffer), mime_type_length) == mime_type_length)
+    for idx, v in buffer[0..<mime_type_length]:
+      mime_type.add(chr(v))
+
+    # Read the next 4 bytes for the picture_description_length
+    doAssert(strm.readData(addr(buffer), 4) == 4)
+    let picture_description_length: int = int(readU64BE(buffer, 0, 31))
+    # echo("Picture desc length: ", picture_description_length)
+
+    # Read the picture_description from file and convert the bytes into a string
+    doAssert(strm.readData(addr(buffer), picture_description_length) == picture_description_length)
+    var picture_description: string = ""
+    for idx, v in buffer[0..<picture_description_length]:
+      picture_description.add(chr(v))
+
+    # Read the next 20 bytes for the picture's width and height, 
+    # color depth, number of colors, and length of the picture data
+    doAssert(strm.readData(addr(buffer), 20) == 20)
+    let width: uint8 = uint8(readU64BE(buffer, 0, 31))
+    let height: uint8 = uint8(readU64BE(buffer, 32, 63))
+    let color_depth = uint8(readU64BE(buffer, 64, 95))
+    let num_colors = uint8(readU64BE(buffer, 96, 127))
+    let picture_data_length = int(readU64BE(buffer, 128, 159))
+
+    # echo("Width: ", width)
+    # echo("Height: ", height)
+    # echo("color_depth: ", color_depth)
+    # echo("num_colors: ", num_colors)
+    # echo("picture_data_length: ", picture_data_length)
+
+    var picture_data: seq[uint8]
+    #var picture_buffer: array[1048576, uint8]
+    var picture_buffer: array[1024, uint8]
+
+    var picture_bytes_remaining = picture_data_length
+    while picture_bytes_remaining > 0:
+       let to_read = min(picture_buffer.len(), picture_bytes_remaining)
+
+       doAssert(strm.readData(addr(picture_buffer), to_read) == to_read)
+       picture_data.add(picture_buffer[0..<to_read])
+
+       picture_bytes_remaining -= to_read
+
+    # var s = newFileStream("test_files/test_pic.png", fmWrite)
+    # for b in picture_data:
+    #   s.write(b)
+    # s.close()
+
+    return FlacBlock(header: block_header, kind: btPicture, picture_type: picture_type, width: width, height: height,
+                    color_depth: color_depth, num_colors: num_colors, picture_description: picture_description,
+                    picture_data: picture_data)
   of 7..126:  # Reserved
     return FlacBlock(header: block_header, kind: btReserved, reserved_number: block_header.block_type)
   else:       # Invalid block

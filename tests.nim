@@ -12,10 +12,9 @@ suite "flac_header":
 
         for i, flac_block in flac_blocks:
             check(flac_block.kind == expected_blocks[i])
-        
-        let vorbis_comment = flac_blocks[1]
 
     test "vorbis_comment_search":
+        let vorbis_comment = flac_blocks[1]
         let user_comments = vorbis_comment.user_comments
 
         let expected_comments = {"ALBUM": "Prequelle", "ARTIST": "Ghost", "TITLE": "Ashes",
@@ -28,3 +27,8 @@ suite "flac_header":
         for k, v in expected_comments:
             check(user_comments.hasKey(k))
             check(user_comments[k] == v)
+    
+    test "picture":
+        let picture = flac_blocks[2]
+
+        echo(picture)
